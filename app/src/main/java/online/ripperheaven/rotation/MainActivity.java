@@ -3,44 +3,72 @@ package online.ripperheaven.rotation;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import rikka.shizuku.Shizuku;
+
 public class MainActivity extends Activity {
     private static final String FORTNITE_PACKAGE = "com.epicgames.fortnite";
     private static final int BG = Color.rgb(13, 13, 16);
     private static final int PANEL = Color.rgb(27, 27, 33);
     private static final int RED = Color.rgb(210, 35, 54);
-    private TextView status;
-    private TextView modeStatus;
-    private String selected = "Landscape";
+    private static final int REQUEST_SHIZUKU = 4102;
+
+    private TextView gameStatus;
+    private TextView shizukuStatus;
+    private TextView resultStatus;
+    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+
+    private final Shizuku.OnRequestPermissionResultListener permissionListener =
+            (requestCode, grantResult) -> runOnUiThread(() -> {
+                if (requestCode == REQUEST_SHIZUKU) {
+                    refreshStatus();
+                    if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                        Toast.makeText(this, "Shell access granted. You can now apply Fortnite resize mode.", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(this, "Shizuku permission was not granted.", Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        Shizuku.addRequestPermissionResultListener(permissionListener);
         buildUi();
-        refreshDetection();
+        refreshStatus();
     }
 
-    private int dp(float n) { return (int)(n * getResources().getDisplayMetrics().density + 0.5f); }
+    @Override protected void onDestroy() {
+        Shizuku.removeRequestPermissionResultListener(permissionListener);
+        worker.shutdownNow();
+        super.onDestroy();
+    }
+
+    private int dp(float n) {
+        return (int) (n * getResources().getDisplayMetrics().density + 0.5f);
+    }
 
     private TextView text(String value, int size, int color, boolean bold) {
         TextView v = new TextView(this);
-        v.setText(value); v.setTextSize(size); v.setTextColor(color);
+        v.setText(value);
+        v.setTextSize(size);
+        v.setTextColor(color);
         if (bold) v.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return v;
     }
@@ -55,7 +83,8 @@ public class MainActivity extends Activity {
 
     private Button button(String label, Runnable action) {
         Button b = new Button(this);
-        b.setText(label); b.setAllCaps(false);
+        b.setText(label);
+        b.setAllCaps(false);
         b.setTextColor(Color.WHITE);
         b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(PANEL));
         b.setMinHeight(dp(54));
@@ -69,95 +98,180 @@ public class MainActivity extends Activity {
         scroll.addView(page);
         setContentView(scroll);
 
-        TextView title = text("RIPPER ROTATION", 25, Color.WHITE, true);
-        page.addView(title);
-        TextView sub = text("META QUEST 3  •  FORTNITE LAUNCHER", 12, 0xffaaaaaf, true);
+        page.addView(text("RIPPER ROTATION", 25, Color.WHITE, true));
+        TextView sub = text("QUEST 3  •  FORTNITE PER-APP RESIZE", 12, 0xffaaaaaf, true);
         LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-1, -2);
-        subLp.topMargin = dp(5); subLp.bottomMargin = dp(18);
+        subLp.topMargin = dp(5);
+        subLp.bottomMargin = dp(18);
         page.addView(sub, subLp);
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        card.setBackgroundTintList(null); card.setBackgroundColor(PANEL);
+        card.setBackgroundColor(PANEL);
         page.addView(card);
 
-        card.addView(text("FORTNITE DETECTION", 13, 0xffbbbbc2, true));
-        status = text("Checking installed apps…", 17, Color.WHITE, true);
+        card.addView(text("FORTNITE", 13, 0xffbbbbc2, true));
+        gameStatus = text("Checking installation…", 16, Color.WHITE, true);
+        LinearLayout.LayoutParams gs = new LinearLayout.LayoutParams(-1, -2);
+        gs.topMargin = dp(7);
+        card.addView(gameStatus, gs);
+
+        TextView shTitle = text("SHIZUKU SHELL ACCESS", 13, 0xffbbbbc2, true);
         LinearLayout.LayoutParams st = new LinearLayout.LayoutParams(-1, -2);
-        st.topMargin = dp(8);
-        card.addView(status, st);
+        st.topMargin = dp(20);
+        page.addView(shTitle, st);
+        shizukuStatus = text("Checking Shizuku…", 15, 0xffffbd69, true);
+        LinearLayout.LayoutParams ss = new LinearLayout.LayoutParams(-1, -2);
+        ss.topMargin = dp(7);
+        page.addView(shizukuStatus, ss);
 
-        TextView heading = text("WINDOW ORIENTATION", 13, 0xffbbbbc2, true);
-        LinearLayout.LayoutParams h = new LinearLayout.LayoutParams(-1, -2);
-        h.topMargin = dp(22); h.bottomMargin = dp(8);
-        page.addView(heading, h);
-
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
-        row1.addView(button("Landscape", () -> choose("Landscape")), new LinearLayout.LayoutParams(0, -2, 1));
-        row1.addView(button("Portrait", () -> choose("Portrait")), new LinearLayout.LayoutParams(0, -2, 1));
-        page.addView(row1);
-        LinearLayout row2 = new LinearLayout(this);
-        row2.setOrientation(LinearLayout.HORIZONTAL);
-        row2.addView(button("Reverse landscape", () -> choose("Reverse landscape")), new LinearLayout.LayoutParams(0, -2, 1));
-        row2.addView(button("Reset", () -> choose("Landscape")), new LinearLayout.LayoutParams(0, -2, 1));
-        page.addView(row2);
-
-        modeStatus = text("Selected: Landscape", 15, 0xffff6878, true);
-        LinearLayout.LayoutParams ms = new LinearLayout.LayoutParams(-1, -2);
-        ms.topMargin = dp(10); page.addView(modeStatus, ms);
-
-        Button launch = button("LAUNCH FORTNITE", this::launchFortnite);
-        launch.setBackgroundTintList(android.content.res.ColorStateList.valueOf(RED));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = dp(22); page.addView(launch, lp);
+        Button permission = button("CONNECT / GRANT SHIZUKU ACCESS", this::connectShizuku);
+        LinearLayout.LayoutParams pp = new LinearLayout.LayoutParams(-1, -2);
+        pp.topMargin = dp(12);
+        page.addView(permission, pp);
 
         TextView note = text(
-            "IMPORTANT: Android apps can request orientation only for their own activity. " +
-            "This app cannot force a separately running Fortnite activity to rotate on standard Quest permissions. " +
-            "The orientation buttons currently control this launcher panel only; they do not change the headset's global orientation or Fortnite's window.",
-            13, 0xffc4c4ca, false);
+                "This applies Android's FORCE_RESIZE_APP compatibility override to Fortnite's package only. " +
+                "It does not change the Quest's global resolution. It may allow Fortnite to resize, but does not guarantee a 4:3 iPad layout.",
+                13, 0xffc4c4ca, false);
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-1, -2);
-        np.topMargin = dp(18); page.addView(note, np);
+        np.topMargin = dp(16);
+        page.addView(note, np);
 
-        Button settings = button("OPEN APP SETTINGS", () -> {
+        Button apply = button("ENABLE FORTNITE RESIZE MODE", () -> runFortniteOverride(true));
+        apply.setBackgroundTintList(android.content.res.ColorStateList.valueOf(RED));
+        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-1, -2);
+        ap.topMargin = dp(18);
+        page.addView(apply, ap);
+
+        Button restore = button("RESTORE FORTNITE DEFAULT", () -> runFortniteOverride(false));
+        LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+        rp.topMargin = dp(8);
+        page.addView(restore, rp);
+
+        Button launch = button("LAUNCH FORTNITE", this::launchFortnite);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = dp(8);
+        page.addView(launch, lp);
+
+        resultStatus = text("Ready. Connect Shizuku to apply the per-app setting.", 13, 0xffc4c4ca, false);
+        LinearLayout.LayoutParams rs = new LinearLayout.LayoutParams(-1, -2);
+        rs.topMargin = dp(14);
+        page.addView(resultStatus, rs);
+
+        Button shizukuHelp = button("OPEN SHIZUKU DOWNLOAD", () ->
+                openUrl("https://shizuku.rikka.app/download/"));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
+        hp.topMargin = dp(16);
+        page.addView(shizukuHelp, hp);
+
+        Button settings = button("OPEN FORTNITE APP SETTINGS", () -> {
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                     Uri.parse("package:" + FORTNITE_PACKAGE));
-            try { startActivity(i); } catch (Exception e) {
-                Toast.makeText(this, "Fortnite settings are unavailable.", Toast.LENGTH_SHORT).show();
-            }
+            try { startActivity(i); }
+            catch (Exception e) { Toast.makeText(this, "Fortnite settings are unavailable.", Toast.LENGTH_SHORT).show(); }
         });
-        LinearLayout.LayoutParams setLp = new LinearLayout.LayoutParams(-1, -2);
-        setLp.topMargin = dp(14); page.addView(settings, setLp);
+        LinearLayout.LayoutParams fp = new LinearLayout.LayoutParams(-1, -2);
+        fp.topMargin = dp(8);
+        page.addView(settings, fp);
     }
 
-    private void choose(String mode) {
-        selected = mode;
-        modeStatus.setText("Selected: " + selected + "  •  launcher panel only");
-        int requested = ActivityInfoOrientation(mode);
-        // This intentionally affects only Ripper Rotation's own activity.
-        setRequestedOrientation(requested);
+    private void openUrl(String url) {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+        catch (Exception e) { Toast.makeText(this, "Could not open link.", Toast.LENGTH_SHORT).show(); }
     }
 
-    private int ActivityInfoOrientation(String mode) {
-        if ("Portrait".equals(mode)) return android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-        if ("Reverse landscape".equals(mode)) return android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
-        return android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+    private boolean isFortniteInstalled() {
+        try {
+            getPackageManager().getPackageInfo(FORTNITE_PACKAGE, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
-    private boolean isInstalled() {
-        try { getPackageManager().getPackageInfo(FORTNITE_PACKAGE, 0); return true; }
-        catch (PackageManager.NameNotFoundException e) { return false; }
+    private void refreshStatus() {
+        if (gameStatus != null) {
+            boolean installed = isFortniteInstalled();
+            gameStatus.setText(installed ? "INSTALLED  •  " + FORTNITE_PACKAGE : "NOT FOUND  •  Check Fortnite package ID");
+            gameStatus.setTextColor(installed ? 0xff72df9a : 0xffffbd69);
+        }
+        if (shizukuStatus != null) {
+            if (!Shizuku.pingBinder()) {
+                shizukuStatus.setText("NOT RUNNING  •  Start Shizuku service first");
+                shizukuStatus.setTextColor(0xffffbd69);
+            } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                shizukuStatus.setText("RUNNING  •  Permission required");
+                shizukuStatus.setTextColor(0xffffbd69);
+            } else {
+                shizukuStatus.setText("CONNECTED  •  Shell permission granted");
+                shizukuStatus.setTextColor(0xff72df9a);
+            }
+        }
     }
 
-    private void refreshDetection() {
-        if (isInstalled()) {
-            status.setText("INSTALLED  •  Epic Fortnite package detected");
-            status.setTextColor(0xff72df9a);
-        } else {
-            status.setText("NOT DETECTED  •  Package not visible");
-            status.setTextColor(0xffffbd69);
+    private void connectShizuku() {
+        if (!Shizuku.pingBinder()) {
+            resultStatus.setText("Shizuku is not running. Install it, start its service using Wireless debugging or ADB, then return here.");
+            openUrl("https://shizuku.rikka.app/guide/setup/");
+            return;
+        }
+        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            refreshStatus();
+            resultStatus.setText("Shizuku is already connected.");
+            return;
+        }
+        Shizuku.requestPermission(REQUEST_SHIZUKU);
+    }
+
+    private void runFortniteOverride(boolean enable) {
+        if (!isFortniteInstalled()) {
+            resultStatus.setText("Fortnite package was not found: " + FORTNITE_PACKAGE);
+            return;
+        }
+        if (!Shizuku.pingBinder()) {
+            resultStatus.setText("Start Shizuku first, then connect it here.");
+            return;
+        }
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            connectShizuku();
+            resultStatus.setText("Grant the Shizuku permission prompt, then tap the resize button again.");
+            return;
+        }
+
+        resultStatus.setText(enable ? "Applying Fortnite-only resize override…" : "Restoring Fortnite default…");
+        worker.execute(() -> {
+            String command = "am compat " + (enable ? "enable" : "disable")
+                    + " FORCE_RESIZE_APP " + FORTNITE_PACKAGE;
+            String output = runShell(command);
+            runOnUiThread(() -> {
+                resultStatus.setText(output);
+                refreshStatus();
+            });
+        });
+    }
+
+    private String runShell(String command) {
+        Process process = null;
+        try {
+            process = Shizuku.newProcess(new String[]{"sh", "-c", command}, null, null);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) output.append(line).append("\n");
+            BufferedReader errors = new BufferedReader(new InputStreamReader(process.getErrorStream()));
+            while ((line = errors.readLine()) != null) output.append(line).append("\n");
+            int code = process.waitFor();
+            if (code == 0) {
+                return (output.length() == 0 ? "Success." : output.toString().trim())
+                        + "\nFortnite override command completed. Restart Fortnite to test it.";
+            }
+            return "Command failed (exit " + code + "): " + output.toString().trim();
+        } catch (Exception e) {
+            return "Could not run the shell command: " + e.getClass().getSimpleName() + ": " + e.getMessage();
+        } finally {
+            if (process != null) process.destroy();
         }
     }
 
@@ -166,17 +280,18 @@ public class MainActivity extends Activity {
             Intent launch = getPackageManager().getLaunchIntentForPackage(FORTNITE_PACKAGE);
             if (launch == null) {
                 Toast.makeText(this, "Fortnite launch activity not found. Check the installed package name.", Toast.LENGTH_LONG).show();
-                refreshDetection();
+                refreshStatus();
                 return;
             }
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(launch);
-        } catch (SecurityException e) {
-            Toast.makeText(this, "Quest blocked the Fortnite launch request.", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
             Toast.makeText(this, "Could not launch Fortnite: " + e.getClass().getSimpleName(), Toast.LENGTH_LONG).show();
         }
     }
 
-    @Override protected void onResume() { super.onResume(); if (status != null) refreshDetection(); }
+    @Override protected void onResume() {
+        super.onResume();
+        refreshStatus();
+    }
 }

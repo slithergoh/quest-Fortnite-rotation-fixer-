@@ -1,0 +1,14 @@
+You are working on Ripper Rotation, an Android APK prototype for Meta Quest 3.
+
+Read README.md first. Use only command-line Android SDK/Gradle tools; do not require Android Studio. Use JDK 17. Inspect the Java, manifest and Gradle files, then build with `gradle assembleDebug` if Gradle is installed. If tools are missing, report exact installation commands and do not pretend a build succeeded.
+
+Critical correctness constraints:
+- Fortnite is a separate app. `setRequestedOrientation()` in Ripper Rotation only affects Ripper Rotation's own Activity.
+- Do not claim or implement cross-app orientation control using an ordinary Activity API.
+- Do not request Accessibility, overlay, root, device-admin, or other powerful permissions as a speculative workaround.
+- Detect Fortnite using PackageManager and the package visibility query. Verify package ID on a connected Quest using `adb shell pm list packages | findstr /i "epic fortnite"`.
+- Safe launch: use `getLaunchIntentForPackage()` and handle null/security/launch failures.
+- Keep Landscape selected by default.
+- Keep Quest headset/global orientation unchanged.
+- If you find a documented public Horizon OS API that genuinely controls another app's window orientation, cite the exact API/docs and add a device-tested implementation; otherwise leave this limitation explicit.
+- Return build output path and test steps. Do not state an APK exists unless Gradle created it.

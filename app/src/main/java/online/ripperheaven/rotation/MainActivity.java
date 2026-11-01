@@ -267,7 +267,12 @@ public class MainActivity extends Activity {
         }
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             connectShizuku();
-            resultStatus.setText("Grant the Shizuku permission prompt, then tap the resize button again.");
+            resultStatus.setText("Grant Shizuku permission, then tap the resize button again.");
+            return;
+        }
+        if (commandService == null) {
+            bindCommandService();
+            resultStatus.setText("Connecting the Shizuku command service. Tap again when connected.");
             return;
         }
 
@@ -275,35 +280,16 @@ public class MainActivity extends Activity {
         worker.execute(() -> {
             String command = "am compat " + (enable ? "enable" : "disable")
                     + " FORCE_RESIZE_APP " + FORTNITE_PACKAGE;
-            String output = runShell(command);
-            runOnUiThread(() -> {
-                resultStatus.setText(output);
-                refreshStatus();
-            });
-        });
-    }
-
-    private String runShell(String command) {
-        Process process = null;
-        try {
-            process = Shizuku.newProcess(new String[]{"sh", "-c", command}, null, null);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) output.append(line).append("\n");
-            BufferedReader errors = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-            while ((line = errors.readLine()) != null) output.append(line).append("\n");
-            int code = process.waitFor();
-            if (code == 0) {
-                return (output.length() == 0 ? "Success." : output.toString().trim())
-                        + "\nFortnite override command completed. Restart Fortnite to test it.";
+            try {
+                String output = commandService.execute(command);
+                runOnUiThread(() -> {
+                    resultStatus.setText(output);
+                    refreshStatus();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> resultStatus.setText("Command failed: " + e.getMessage()));
             }
-            return "Command failed (exit " + code + "): " + output.toString().trim();
-        } catch (Exception e) {
-            return "Could not run the shell command: " + e.getClass().getSimpleName() + ": " + e.getMessage();
-        } finally {
-            if (process != null) process.destroy();
-        }
+        });
     }
 
     private void launchFortnite() {

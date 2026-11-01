@@ -1,6 +1,7 @@
 package online.ripperheaven.rotation;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -15,12 +16,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import rikka.shizuku.Shizuku;
+import rikka.shizuku.Shizuku.UserServiceArgs;
 
 public class MainActivity extends Activity {
     private static final String FORTNITE_PACKAGE = "com.epicgames.fortnite";
@@ -33,13 +33,30 @@ public class MainActivity extends Activity {
     private TextView shizukuStatus;
     private TextView resultStatus;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private ICommandService commandService;
+    private final UserServiceArgs serviceArgs = new UserServiceArgs(new ComponentName("online.ripperheaven.rotation", CommandService.class.getName()))
+            .daemon(false).processNameSuffix("fortnitecmd").version(1);
+    private final android.content.ServiceConnection serviceConnection = new android.content.ServiceConnection() {
+        @Override public void onServiceConnected(ComponentName name, android.os.IBinder service) {
+            commandService = ICommandService.Stub.asInterface(service);
+            runOnUiThread(() -> {
+                resultStatus.setText("Shell service connected. Fortnite-only controls are ready.");
+                refreshStatus();
+            });
+        }
+        @Override public void onServiceDisconnected(ComponentName name) {
+            commandService = null;
+            runOnUiThread(() -> refreshStatus());
+        }
+    };
 
     private final Shizuku.OnRequestPermissionResultListener permissionListener =
             (requestCode, grantResult) -> runOnUiThread(() -> {
                 if (requestCode == REQUEST_SHIZUKU) {
                     refreshStatus();
                     if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                        Toast.makeText(this, "Shell access granted. You can now apply Fortnite resize mode.", Toast.LENGTH_LONG).show();
+                        bindCommandService();
+                        Toast.makeText(this, "Shell access granted. Connecting controls…", Toast.LENGTH_LONG).show();
                     } else {
                         Toast.makeText(this, "Shizuku permission was not granted.", Toast.LENGTH_LONG).show();
                     }
@@ -56,6 +73,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         Shizuku.removeRequestPermissionResultListener(permissionListener);
+        try { Shizuku.unbindUserService(serviceArgs, serviceConnection, true); } catch (Exception ignored) { }
         worker.shutdownNow();
         super.onDestroy();
     }
@@ -204,6 +222,9 @@ public class MainActivity extends Activity {
             } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                 shizukuStatus.setText("RUNNING  •  Permission required");
                 shizukuStatus.setTextColor(0xffffbd69);
+            } else if (commandService == null) {
+                shizukuStatus.setText("PERMISSION GRANTED  •  Connecting command service…");
+                shizukuStatus.setTextColor(0xffffbd69);
             } else {
                 shizukuStatus.setText("CONNECTED  •  Shell permission granted");
                 shizukuStatus.setTextColor(0xff72df9a);
@@ -218,11 +239,21 @@ public class MainActivity extends Activity {
             return;
         }
         if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            bindCommandService();
             refreshStatus();
-            resultStatus.setText("Shizuku is already connected.");
+            resultStatus.setText("Shizuku permission is already granted. Connecting…");
             return;
         }
         Shizuku.requestPermission(REQUEST_SHIZUKU);
+    }
+
+    private void bindCommandService() {
+        try {
+            Shizuku.bindUserService(serviceArgs, serviceConnection);
+            resultStatus.setText("Connecting the shell command service…");
+        } catch (Exception e) {
+            resultStatus.setText("Could not connect Shizuku service: " + e.getMessage());
+        }
     }
 
     private void runFortniteOverride(boolean enable) {

@@ -4,6 +4,10 @@ android {
     namespace = "online.ripperheaven.rotation"
     compileSdk = 35
 
+    buildFeatures {
+        aidl = true
+    }
+
     defaultConfig {
         applicationId = "online.ripperheaven.rotation"
         minSdk = 29

@@ -3,16 +3,13 @@ package online.ripperheaven.rotation;
 import android.content.Context;
 import android.util.Log;
 
-import androidx.annotation.Keep;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
-@Keep
 public class CommandService extends ICommandService.Stub {
     public CommandService() { }
 
-    @Keep
     public CommandService(Context context) { }
 
     @Override

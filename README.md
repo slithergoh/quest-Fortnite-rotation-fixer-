@@ -1,38 +1,23 @@
-# Ripper Rotation — Fortnite per-app resize prototype
+# Ripper Rotation 0.3.0 — safe Quest Fortnite launcher
 
-Ripper Rotation now uses Shizuku (ADB shell privileges) to apply Android's `FORCE_RESIZE_APP` compatibility override to the Fortnite package only.
-
-## What it does
+## What this version does
 
 - Detects the Fortnite package `com.epicgames.fortnite`.
-- Connects to Shizuku and asks the user to approve shell access.
-- Runs `am compat enable FORCE_RESIZE_APP com.epicgames.fortnite` to enable Android's per-package resize compatibility override.
-- Can undo the setting with `am compat disable FORCE_RESIZE_APP com.epicgames.fortnite`.
-- Launches Fortnite normally after the setting is applied.
-
-The command names one package only. It does not change the Quest's global display resolution or other apps.
+- Launches Fortnite through Android's normal app-launch API.
+- Opens Fortnite's Android app-info page when Horizon OS exposes it.
+- Runs without Shizuku, root, ADB, shell commands, or privileged permissions.
 
 ## Important limitation
 
-`FORCE_RESIZE_APP` makes an app resizable and bypasses Android size-compatibility mode. It does **not** set a custom 4:3 aspect ratio, create a virtual display, spoof an iPad, or guarantee that Fortnite will render in an iPad layout. Quest firmware may also reject or ignore this compatibility override. The app displays the actual shell command output so a failure is visible rather than claiming success.
+A normal Android/Quest app can request orientation for its own activity only. It cannot force a separate Fortnite activity to rotate or render at a custom 4:3 aspect ratio. Resizing a floating Quest panel is controlled by Horizon OS and does not change the game's internal render aspect ratio.
 
-This is not the virtual-display solution. Android restricts launching unrelated apps onto private virtual displays, and this project does not bypass that restriction.
+This build deliberately removes the earlier Shizuku shell implementation. It does not write compatibility overrides, change global display settings, alter resolution, create virtual displays, or modify system files. This makes it safer, but it is a launcher rather than a working Fortnite rotation/4:3 patch.
 
-## Setup on Quest
+## Quest install
 
-1. Install the Shizuku app from https://shizuku.rikka.app/download/.
-2. Start Shizuku's service using its Wireless debugging instructions or ADB instructions. On non-rooted devices, Shizuku must be started again after a headset reboot.
-3. Open Ripper Rotation and tap **CONNECT / GRANT SHIZUKU ACCESS**.
-4. Approve the permission prompt.
-5. Tap **ENABLE FORTNITE RESIZE MODE**.
-6. Fully close Fortnite and relaunch it using **LAUNCH FORTNITE**.
-7. If it does not help, tap **RESTORE FORTNITE DEFAULT**.
+Install the generated APK using your normal Quest sideloading method. Open Ripper Rotation and choose **LAUNCH FORTNITE**. **OPEN FORTNITE APP SETTINGS** opens the Android app-info page if Horizon OS permits it.
 
-## Package ID
-
-The default package is `com.epicgames.fortnite`. If Fortnite uses a different package ID on the Quest, update `FORTNITE_PACKAGE` in `MainActivity.java` and the package query in `AndroidManifest.xml`.
-
-## Build without Android Studio
+## Build
 
 Requirements: JDK 17, Android SDK command-line tools, platform SDK 35, and Gradle 8.9.
 
@@ -45,6 +30,5 @@ APK output: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## References
 
-- Android per-app compatibility overrides: https://developer.android.com/guide/practices/device-compatibility-mode
-- Shizuku API: https://github.com/RikkaApps/Shizuku-API
-- Shizuku setup: https://shizuku.rikka.app/guide/setup/
+- Meta Quest developer setup: https://developers.meta.com/vr/documentation/native/android/mobile-device-setup/
+- Android app compatibility and aspect-ratio controls: https://developer.android.com/guide/practices/device-compatibility-mode

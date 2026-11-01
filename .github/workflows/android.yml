@@ -1,4 +1,3 @@
-
 name: Build Ripper Rotation APK
 
 on:
@@ -23,11 +22,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
-
+      # GitHub's Ubuntu runner already includes Android command-line tools.
+      # Avoid setup-android here: its default attempts to install the retired
+      # SDK package named "tools", which makes sdkmanager exit with code 1.
       - name: Install SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
